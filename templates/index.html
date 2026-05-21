@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>🕵️ Ultimate Hunter - صاعد</title>
+    <style>
+        body{background:#0a0e1a;color:#e6edf3;font-family:Arial;padding:20px}
+        .container{max-width:1400px;margin:auto}
+        .header{background:#1a1f2e;padding:20px;border-radius:16px;margin-bottom:20px;text-align:center}
+        .stats-bar{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;align-items:center}
+        select,button{background:#2d3448;color:white;border:none;padding:8px;border-radius:8px}
+        .scan-btn{background:#58a6ff;padding:8px 20px;cursor:pointer;transition:all 0.3s}
+        .scan-btn:hover{background:#3b8fd9}
+        .scan-btn:disabled{background:#888;cursor:not-allowed;opacity:0.6}
+        .stop-btn{background:#da3633}
+        .stop-btn:hover{background:#b02a2a}
+        .cards-container{display:grid;grid-template-columns:repeat(auto-fill,minmax(350px,1fr));gap:20px}
+        .card{background:#0d1117;border-radius:16px;padding:20px;position:relative}
+        .score-badge{position:absolute;top:15px;left:15px;width:55px;height:55px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center}
+        .symbol-name{font-size:1.5em;padding-right:70px}
+        .price-info{background:#161b22;padding:8px;border-radius:8px;margin:10px 0}
+        .targets{display:flex;gap:8px;margin:10px 0}
+        .target{flex:1;background:#161b22;padding:5px;border-radius:8px;text-align:center}
+        .evidence-list{background:#161b22;padding:8px;border-radius:8px;font-size:0.75em}
+        .loading{text-align:center;padding:40px}
+        .status-analyzing{background:#fbbf24;color:#000;padding:5px 10px;border-radius:8px}
+        .status-done{background:#3fb950;color:#fff}
+        .status-error{background:#da3633;color:#fff}
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🕵️ ULTIMATE HUNTER - صاعد</h1>
+        <div class="stats-bar">
+            <div>📂 القسم:
+                <select id="section">
+                    <option value="1">القسم 1 (100 عملة)</option>
+                    <option value="2">القسم 2 (100 عملة)</option>
+                    <option value="3">القسم 3 (100 عملة)</option>
+                    <option value="4" selected>القسم 4 (100 عملة)</option>
+                    <option value="5">القسم 5 (47 عملة)</option>
+                </select>
+            </div>
+            <div>📊 الحالة: <span id="status" class="status-done" style="padding:5px 10px;border-radius:8px">جاهز</span></div>
+            <div>⏱️ الفريم:
+                <select id="timeframe">
+                    <option value="5m">5م</option><option value="15m">15م</option>
+                    <option value="1h">1س</option><option value="4h" selected>4س</option>
+                    <option value="1d">يوم</option><option value="1M">شهر</option>
+                </select>
+            </div>
+            <div>🎯 العتبة:
+                <select id="threshold">
+                    <option value="2">2</option><option value="3">3</option>
+                    <option value="4" selected>4</option><option value="5">5</option><option value="6">6</option>
+                </select>
+            </div>
+            <button class="scan-btn" id="scanBtn" onclick="startScan()">🔍 ابدأ التحليل</button>
+            <button class="scan-btn stop-btn" onclick="stopScan()">⏹️ إيقاف</button>
+        </div>
+    </div>
+    <div class="trades-panel" style="background:#0d1117;border-radius:16px;padding:15px;margin-bottom:20px">
+        <h3>📋 صفقاتي</h3>
+        <div id="tradesList">لا توجد صفقات</div>
+    </div>
+    <div id="results" class="loading">اضغط ابدأ التحليل</div>
+</div>
+<script>
+let stopReq=false;
+let scanning=false;
+
+async function startScan(){
+    if(scanning) return;
+    scanning=true;
+    stopReq=false;
+    const btn=document.getElementById('scanBtn');
+    const statusSpan=document.getElementById('status');
+    
+    btn.disabled=true;
+    btn.innerHTML='⏳ جاري التحليل...';
+    btn.style.background='#fbbf24';
+    btn.style.color='#000';
+    statusSpan.innerHTML='🕵️ جاري التحليل...';
+    statusSpan.className='status-analyzing';
+    statusSpan.style.background='#fbbf24';
+    statusSpan.style.color='#000';
+    
+    document.getElementById('results').innerHTML='<div class="loading">⏳ جاري تحليل العملات...</div>';
+    
+    const section=document.getElementById('section').value;
+    const timeframe=document.getElementById('timeframe').value;
+    const threshold=document.getElementById('threshold').value;
+    
+    try{
+        const res=await fetch('/api/scan',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({section:parseInt(section),timeframe:timeframe,threshold:parseInt(threshold)})
+        });
+        const data=await res.json();
+        if(stopReq){
+            document.getElementById('results').innerHTML='<div class="loading">⏹️ تم إيقاف التحليل</div>';
+            return;
+        }
+        if(data.success){
+            displayResults(data.results);
+            statusSpan.innerHTML=`✅ تم تحليل ${data.total_analyzed} عملة`;
+            statusSpan.className='status-done';
+            statusSpan.style.background='#3fb950';
+            btn.innerHTML='🔍 ابدأ التحليل';
+        } else {
+            throw new Error('فشل التحليل');
+        }
+    } catch(e){
+        document.getElementById('results').innerHTML=`<div class="loading">❌ خطأ: ${e.message}</div>`;
+        statusSpan.innerHTML='❌ فشل التحليل';
+        statusSpan.className='status-error';
+        statusSpan.style.background='#da3633';
+        btn.innerHTML='🔍 ابدأ التحليل';
+    } finally {
+        scanning=false;
+        btn.disabled=false;
+        btn.style.background='#58a6ff';
+        btn.style.color='white';
+    }
+    loadTrades();
+}
+
+function stopScan(){
+    stopReq=true;
+    if(scanning){
+        document.getElementById('status').innerHTML='⏹️ تم الإيقاف';
+        document.getElementById('status').style.background='#da3633';
+        const btn=document.getElementById('scanBtn');
+        btn.disabled=false;
+        btn.innerHTML='🔍 ابدأ التحليل';
+        btn.style.background='#58a6ff';
+        scanning=false;
+    }
+}
+
+function displayResults(results){
+    if(!results || results.length===0){
+        document.getElementById('results').innerHTML='<div class="loading">⚠️ لا توجد إشارات</div>';
+        return;
+    }
+    let html='<div class="cards-container">';
+    for(let c of results){
+        let col=c.score>=70?'#3fb950':(c.score>=55?'#a371f7':'#8b949e');
+        html+=`<div class="card">
+            <div class="score-badge" style="border-color:${col}"><div>${c.score}%</div></div>
+            <div class="symbol-name">${c.symbol}/USDT</div>
+            <div class="price-info">💰 ${c.current_price}</div>
+            <div class="targets">
+                <div class="target">🎯 هدف1: ${c.target_1}</div>
+                <div class="target">🎯 هدف2: ${c.target_2}</div>
+                <div class="target">🎯 هدف3: ${c.target_3}</div>
+            </div>
+            <div class="evidence-list">${c.evidence.slice(0,3).map(e=>`🔍 ${e}<br>`).join('')}</div>
+        </div>`;
+    }
+    html+='</div>';
+    document.getElementById('results').innerHTML=html;
+}
+
+async function loadTrades(){
+    try{
+        const res=await fetch('/api/trades');
+        const trades=(await res.json()).trades;
+        let html='';
+        for(let[id,t] of Object.entries(trades)){
+            html+=`<div style="background:#161b22;padding:10px;border-radius:10px;margin-bottom:8px;display:flex;justify-content:space-between">
+                <span>${t.symbol} | دخول: ${t.open_price} | قوة: ${t.open_score}%</span>
+                <button onclick="closeTrade('${id}',${t.open_price},${t.open_score})" style="background:#da3633;border:none;padding:5px 12px;border-radius:8px;color:white">إغلاق</button>
+            </div>`;
+        }
+        document.getElementById('tradesList').innerHTML=html || 'لا توجد صفقات';
+    } catch(e){console.error(e);}
+}
+
+async function closeTrade(id,price,score){
+    if(!confirm('إغلاق الصفقة؟')) return;
+    await fetch('/api/close_trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({trade_id:id,current_price:price,score})});
+    loadTrades();
+}
+
+window.onload=()=>{loadTrades();};
+</script>
+</body>
+</html>
